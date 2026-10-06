@@ -1,0 +1,11 @@
+# Normaliza as quebras de linha: no repositório ficam sempre LF; no Windows o git
+# converte automaticamente para CRLF ao fazer checkout. Evita diffs "fantasma" em que
+# todas as linhas parecem alteradas só por causa das quebras de linha.
+* text=auto
+
+*.cs     text diff=csharp
+*.csproj text
+*.sln    text eol=crlf
+*.ps1    text eol=crlf
+*.md     text
+*.json   text

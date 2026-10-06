@@ -1,0 +1,55 @@
+# ---------------------------------------------------------------
+# .gitignore do PersonalAssistant (.NET / Visual Studio)
+# Tudo o que é gerado pela compilação ou é específico do teu PC
+# fica fora do repositório.
+# ---------------------------------------------------------------
+
+# Resultados da compilação
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Aa][Rr][Mm]64/
+
+# Pasta e ficheiros do Visual Studio (definições do teu utilizador, caches)
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Rider / VS Code
+.idea/
+.vscode/
+
+# Resultados de testes e cobertura
+TestResults/
+[Tt]est[Rr]esult*/
+*.trx
+coverage*.json
+coverage*.xml
+*.coverage
+
+# NuGet
+*.nupkg
+*.snupkg
+packages/
+
+# Modelos de IA (o modelo Whisper tem ~140 MB e é descarregado automaticamente
+# na primeira utilização — não pertence ao repositório).
+# Atenção: NÃO ignorar a pasta "Models/" inteira — PersonalAssistant/Models/ tem código C#.
+*.bin
+*.gguf
+
+# Configuração local (para segredos ou valores só do teu PC, no futuro)
+appsettings.*.local.json
+appsettings.Development.json
+
+# Ficheiros temporários do sistema
+Thumbs.db
+Desktop.ini
+.DS_Store
+*.tmp
+*.log
