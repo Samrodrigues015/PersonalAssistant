@@ -1,0 +1,60 @@
+# ---------------------------------------------------------------------------
+# CI (Integração Contínua) do PersonalAssistant
+#
+# O que faz: sempre que há um push para a main (ou um Pull Request para a main),
+# o GitHub arranca uma máquina Windows "limpa", descarrega o código, compila a
+# solução e corre todos os testes xUnit. Se algo falhar, o commit fica marcado
+# com um ❌ no GitHub — assim sabes logo que algo partiu, sem teres de lembrar
+# de correr os testes à mão.
+#
+# Porquê Windows (e não Linux, que é mais rápido)? O projeto usa
+# net10.0-windows (System.Speech, NAudio), que só compila/corre em Windows.
+# ---------------------------------------------------------------------------
+
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  # Permite correr o workflow manualmente a partir do separador "Actions".
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    name: Compilar e testar
+    runs-on: windows-latest
+
+    steps:
+      # 1. Descarrega o código do repositório para a máquina do GitHub.
+      - name: Obter o código
+        uses: actions/checkout@v4
+
+      # 2. Instala o SDK do .NET 10 (a máquina vem "vazia").
+      - name: Instalar .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      # 3. Descarrega os pacotes NuGet (Whisper.net, xUnit, Moq, ...).
+      - name: Restaurar pacotes NuGet
+        run: dotnet restore PersonalAssistant.sln
+
+      # 4. Compila em Release. --no-restore porque o passo anterior já o fez.
+      - name: Compilar
+        run: dotnet build PersonalAssistant.sln --configuration Release --no-restore
+
+      # 5. Corre os testes. --no-build porque já compilámos no passo anterior.
+      #    O logger "trx" gera um ficheiro com os resultados detalhados.
+      - name: Correr testes
+        run: dotnet test PersonalAssistant.sln --configuration Release --no-build --logger "trx;LogFileName=test-results.trx" --results-directory TestResults
+
+      # 6. Guarda os resultados dos testes como "artifact" do workflow, para
+      #    os poderes descarregar no GitHub — mesmo que os testes falhem (if: always()).
+      - name: Publicar resultados dos testes
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: TestResults/*.trx

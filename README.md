@@ -1,5 +1,7 @@
 # PersonalAssistant — V1
 
+[![CI](https://github.com/Samrodrigues015/PersonalAssistant/actions/workflows/ci.yml/badge.svg)](https://github.com/Samrodrigues015/PersonalAssistant/actions/workflows/ci.yml)
+
 Assistente pessoal para Windows, em C#/.NET, que conversa através do Ollama
 (modelo local `qwen2.5-coder:7b`) e pode executar um conjunto controlado de
 ações no computador (abrir o Bloco de Notas, a Calculadora, o navegador, etc.).
@@ -90,6 +92,14 @@ dotnet test
 ```
 
 Ou no Visual Studio: **Test Explorer → Run All Tests**.
+
+### Integração contínua (GitHub Actions)
+
+A cada push (ou Pull Request) para a `main`, o workflow
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) arranca uma máquina Windows no GitHub,
+compila a solução em Release e corre todos os testes. O resultado aparece no badge no topo
+deste README e no separador **Actions** do repositório. Também pode ser corrido à mão em
+**Actions → CI → Run workflow**.
 
 ## Experimentar
 
