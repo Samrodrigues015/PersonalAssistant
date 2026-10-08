@@ -44,6 +44,7 @@ packages/
 *.gguf
 
 # Configuração local (para segredos ou valores só do teu PC, no futuro)
+appsettings.local.json
 appsettings.*.local.json
 appsettings.Development.json
 

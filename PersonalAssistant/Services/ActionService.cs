@@ -35,7 +35,7 @@ public class ActionService : IActionService
         catch (Exception ex) when (ex is not ActionNotFoundException)
         {
             _logger.LogError(ex, "Erro ao executar a ação '{Action}'", name);
-            throw new ActionExecutionException($"Ocorreu um erro ao executar a ação '{name}'.", ex);
+            throw new ActionExecutionException($"Ocorreu um erro ao executar a ação '{name}': {ex.Message}", ex);
         }
     }
 }

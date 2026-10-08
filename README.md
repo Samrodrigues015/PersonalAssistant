@@ -175,7 +175,45 @@ reconhecimento corre 100% local e offline.
 Se preferires descarregar o modelo tu próprio, ou já o tiveres de outro projeto, basta colocá-lo
 no caminho definido em `Voice:ModelPath` no `appsettings.json`.
 
-### Configuração (`appsettings.json`)
+### WhatsApp
+
+O assistente consegue abrir o WhatsApp e preparar mensagens. Exemplos:
+
+- *"abre o WhatsApp"* → abre só a aplicação;
+- *"abre a conversa com a Ana"* → abre a conversa com a Ana;
+- *"manda à Ana que chego às 8"* → abre a conversa com a Ana com **"chego às 8"** já escrito.
+
+**A mensagem nunca é enviada sozinha** — és sempre tu que carregas em Enviar no WhatsApp.
+E a IA só consegue preparar mensagens para contactos que tu configuraste (não pode inventar números).
+
+### Configurar os contactos
+
+Os contactos são dados pessoais, por isso **não vão no `appsettings.json`** (que está no GitHub).
+Ficam num ficheiro só teu, `appsettings.local.json`, que está no `.gitignore`:
+
+1. Copia `PersonalAssistant/appsettings.local.example.json` para
+   `PersonalAssistant/appsettings.local.json`.
+2. Põe os teus contactos: nome → número **com indicativo do país** (ex.: `351912345678`).
+3. Volta a compilar (o ficheiro é copiado para a pasta de saída automaticamente).
+
+```json
+{
+  "WhatsApp": {
+    "UseDesktopApp": true,
+    "Contacts": {
+      "Ana": "351910000000",
+      "Mãe": "351920000000"
+    }
+  }
+}
+```
+
+- Os nomes são comparados sem maiúsculas nem acentos ("mae" = "Mãe"), o que ajuda quando o
+  pedido vem por voz.
+- `UseDesktopApp: true` tenta a app de desktop do WhatsApp; se não estiver instalada, abre o
+  WhatsApp Web no navegador. Com `false`, usa sempre o WhatsApp Web.
+
+## Configuração (`appsettings.json`)
 
 ```json
 "Voice": {

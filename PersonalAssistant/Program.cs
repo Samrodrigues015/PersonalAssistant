@@ -15,9 +15,15 @@ try
     // Host.CreateApplicationBuilder já carrega automaticamente o appsettings.json
     // (e appsettings.{Environment}.json) da pasta de saída, por isso não é preciso configurá-lo à mão.
 
+    // appsettings.local.json: valores só do TEU computador (ex.: contactos do WhatsApp).
+    // Está no .gitignore, por isso nunca vai para o GitHub. É opcional — se não existir, é ignorado.
+    // Carregado depois do appsettings.json, por isso o que estiver aqui sobrepõe-se ao de lá.
+    builder.Configuration.AddJsonFile("appsettings.local.json", optional: true, reloadOnChange: false);
+
     builder.Services.Configure<OllamaSettings>(builder.Configuration.GetSection("Ollama"));
     builder.Services.Configure<AssistantSettings>(builder.Configuration.GetSection("Assistant"));
     builder.Services.Configure<VoiceSettings>(builder.Configuration.GetSection("Voice"));
+    builder.Services.Configure<WhatsAppSettings>(builder.Configuration.GetSection("WhatsApp"));
 
     // HttpClient "tipado": sempre que pedirmos um IOllamaService ao container,
     // recebemos um OllamaService já com um HttpClient configurado (BaseAddress, timeout).
@@ -42,6 +48,7 @@ try
     builder.Services.AddSingleton<IAction, OpenNotepadAction>();
     builder.Services.AddSingleton<IAction, OpenCalculatorAction>();
     builder.Services.AddSingleton<IAction, OpenBrowserAction>();
+    builder.Services.AddSingleton<IAction, OpenWhatsAppAction>();
 
     // Voz: reconhecimento (fala → texto) e síntese (texto → fala). Nenhuma delas
     // mexe no AssistantService — o texto reconhecido entra pelo mesmo ProcessAsync de sempre.
