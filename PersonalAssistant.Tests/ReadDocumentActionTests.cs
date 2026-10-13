@@ -4,11 +4,12 @@ using DocumentFormat.OpenXml.Wordprocessing;
 using Microsoft.Extensions.Options;
 using PersonalAssistant.Actions;
 using PersonalAssistant.Configuration;
-using UglyToad.PdfPig.Content;
 using UglyToad.PdfPig.Core;
 using UglyToad.PdfPig.Fonts.Standard14Fonts;
 using UglyToad.PdfPig.Writer;
 using Xunit;
+// "PageSize" existe no OpenXml (Word) e no PdfPig (PDF): o alias diz qual queremos.
+using PdfPageSize = UglyToad.PdfPig.Content.PageSize;
 
 namespace PersonalAssistant.Tests;
 
@@ -172,7 +173,7 @@ public class ReadDocumentActionTests : IDisposable
         // Cria um PDF simples com texto, usando o "escritor" do próprio PdfPig.
         var builder = new PdfDocumentBuilder();
         var font = builder.AddStandard14Font(Standard14Font.Helvetica);
-        var page = builder.AddPage(PageSize.A4);
+        var page = builder.AddPage(PdfPageSize.A4);
         page.AddText("Pagar a renda", 12, new PdfPoint(50, 750), font);
         File.WriteAllBytes(path, builder.Build());
 
