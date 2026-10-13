@@ -1,4 +1,5 @@
 using PersonalAssistant.Actions;
+using PersonalAssistant.Models;
 
 namespace PersonalAssistant.Services;
 
@@ -15,5 +16,6 @@ public interface IActionService
 
     /// <exception cref="ActionNotFoundException">A ação pedida não existe.</exception>
     /// <exception cref="ActionExecutionException">A ação existe mas falhou ao executar.</exception>
-    Task<string> ExecuteAsync(string name, string? argument, CancellationToken cancellationToken = default);
+    /// <returns>A mensagem para o utilizador e, se a ação devolveu algum texto, esse texto (Output).</returns>
+    Task<ActionResult> ExecuteAsync(string name, string? argument, CancellationToken cancellationToken = default);
 }

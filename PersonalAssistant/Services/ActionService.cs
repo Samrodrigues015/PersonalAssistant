@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using PersonalAssistant.Actions;
+using PersonalAssistant.Models;
 
 namespace PersonalAssistant.Services;
 
@@ -18,7 +19,7 @@ public class ActionService : IActionService
 
     public bool TryGetAction(string name, out IAction? action) => _actions.TryGetValue(name, out action);
 
-    public async Task<string> ExecuteAsync(string name, string? argument, CancellationToken cancellationToken = default)
+    public async Task<ActionResult> ExecuteAsync(string name, string? argument, CancellationToken cancellationToken = default)
     {
         if (!_actions.TryGetValue(name, out var action))
         {
@@ -29,8 +30,8 @@ public class ActionService : IActionService
         try
         {
             _logger.LogInformation("A executar a ação '{Action}' com argumento '{Argument}'", name, argument);
-            await action.ExecuteAsync(argument, cancellationToken);
-            return $"Ação '{name}' executada com sucesso.";
+            var output = await action.ExecuteAsync(argument, cancellationToken);
+            return new ActionResult($"Ação '{name}' executada com sucesso.", output);
         }
         catch (Exception ex) when (ex is not ActionNotFoundException)
         {

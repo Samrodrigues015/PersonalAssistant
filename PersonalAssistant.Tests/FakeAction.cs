@@ -8,10 +8,16 @@ namespace PersonalAssistant.Tests;
 /// </summary>
 public class FakeAction : IAction
 {
-    public FakeAction(string name, bool requiresConfirmation)
+    private readonly string? _output;
+
+    /// <param name="output">
+    /// Texto que a ação "devolve" (simula, por exemplo, um documento lido). null = ação sem resultado.
+    /// </param>
+    public FakeAction(string name, bool requiresConfirmation, string? output = null)
     {
         Name = name;
         RequiresConfirmation = requiresConfirmation;
+        _output = output;
     }
 
     public string Name { get; }
@@ -21,10 +27,10 @@ public class FakeAction : IAction
     public bool WasExecuted { get; private set; }
     public string? LastArgument { get; private set; }
 
-    public Task ExecuteAsync(string? argument, CancellationToken cancellationToken = default)
+    public Task<string?> ExecuteAsync(string? argument, CancellationToken cancellationToken = default)
     {
         WasExecuted = true;
         LastArgument = argument;
-        return Task.CompletedTask;
+        return Task.FromResult(_output);
     }
 }

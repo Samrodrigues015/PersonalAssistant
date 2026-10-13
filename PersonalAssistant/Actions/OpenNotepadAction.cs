@@ -8,7 +8,7 @@ public class OpenNotepadAction : IAction
     public string Description => "Abre o Bloco de Notas (notepad.exe) do Windows.";
     public bool RequiresConfirmation => false;
 
-    public Task ExecuteAsync(string? argument, CancellationToken cancellationToken = default)
+    public Task<string?> ExecuteAsync(string? argument, CancellationToken cancellationToken = default)
     {
         Process.Start(new ProcessStartInfo
         {
@@ -16,6 +16,6 @@ public class OpenNotepadAction : IAction
             UseShellExecute = true
         });
 
-        return Task.CompletedTask;
+        return Task.FromResult<string?>(null);
     }
 }

@@ -21,5 +21,14 @@ public interface IAction
     /// </summary>
     bool RequiresConfirmation { get; }
 
-    Task ExecuteAsync(string? argument, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Executa a ação.
+    /// </summary>
+    /// <returns>
+    /// Texto para a IA usar na resposta (ex.: o conteúdo de um documento lido), ou <c>null</c>
+    /// se a ação só "faz" algo (abrir um programa) e não tem nada para devolver.
+    /// Quando há texto, o AssistantService volta a chamar o modelo com esse resultado,
+    /// para que a resposta final seja baseada nele.
+    /// </returns>
+    Task<string?> ExecuteAsync(string? argument, CancellationToken cancellationToken = default);
 }

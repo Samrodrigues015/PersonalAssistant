@@ -1,7 +1,5 @@
 using System.ComponentModel;
 using System.Diagnostics;
-using System.Globalization;
-using System.Text;
 using Microsoft.Extensions.Options;
 using PersonalAssistant.Configuration;
 
@@ -37,7 +35,7 @@ public class OpenWhatsAppAction : IAction
 
             if (!string.IsNullOrWhiteSpace(name) && digits.Length > 0)
             {
-                _contacts[NormalizeName(name)] = (name.Trim(), digits);
+                _contacts[TextNormalizer.Normalize(name)] = (name.Trim(), digits);
             }
         }
     }
@@ -64,7 +62,7 @@ public class OpenWhatsAppAction : IAction
     // por isso não pede confirmação — o "Enviar" continua a ser sempre teu.
     public bool RequiresConfirmation => false;
 
-    public Task ExecuteAsync(string? argument, CancellationToken cancellationToken = default)
+    public Task<string?> ExecuteAsync(string? argument, CancellationToken cancellationToken = default)
     {
         var target = ResolveTarget(argument);
 
@@ -73,7 +71,7 @@ public class OpenWhatsAppAction : IAction
             try
             {
                 OpenUri(target.DesktopUri);
-                return Task.CompletedTask;
+                return Task.FromResult<string?>(null);
             }
             catch (Win32Exception)
             {
@@ -83,7 +81,7 @@ public class OpenWhatsAppAction : IAction
         }
 
         OpenUri(target.WebUri);
-        return Task.CompletedTask;
+        return Task.FromResult<string?>(null);
     }
 
     /// <summary>
@@ -104,7 +102,7 @@ public class OpenWhatsAppAction : IAction
         var contactName = separatorIndex >= 0 ? argument[..separatorIndex] : argument;
         var message = separatorIndex >= 0 ? argument[(separatorIndex + 1)..].Trim() : string.Empty;
 
-        if (!_contacts.TryGetValue(NormalizeName(contactName), out var contact))
+        if (!_contacts.TryGetValue(TextNormalizer.Normalize(contactName), out var contact))
         {
             var known = _contacts.Count == 0
                 ? "Não há contactos configurados no appsettings.local.json."
@@ -129,25 +127,6 @@ public class OpenWhatsAppAction : IAction
             FileName = uri,
             UseShellExecute = true
         });
-    }
-
-    /// <summary>
-    /// "  Mãe " → "mae". Remove acentos (decompõe "ã" em "a" + til e descarta o til) e espaços.
-    /// </summary>
-    private static string NormalizeName(string name)
-    {
-        var decomposed = name.Trim().ToLowerInvariant().Normalize(NormalizationForm.FormD);
-        var builder = new StringBuilder(decomposed.Length);
-
-        foreach (var c in decomposed)
-        {
-            if (CharUnicodeInfo.GetUnicodeCategory(c) != UnicodeCategory.NonSpacingMark)
-            {
-                builder.Append(c);
-            }
-        }
-
-        return builder.ToString().Normalize(NormalizationForm.FormC);
     }
 }
 

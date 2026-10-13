@@ -24,6 +24,7 @@ try
     builder.Services.Configure<AssistantSettings>(builder.Configuration.GetSection("Assistant"));
     builder.Services.Configure<VoiceSettings>(builder.Configuration.GetSection("Voice"));
     builder.Services.Configure<WhatsAppSettings>(builder.Configuration.GetSection("WhatsApp"));
+    builder.Services.Configure<DocumentSettings>(builder.Configuration.GetSection("Documents"));
 
     // HttpClient "tipado": sempre que pedirmos um IOllamaService ao container,
     // recebemos um OllamaService já com um HttpClient configurado (BaseAddress, timeout).
@@ -49,6 +50,7 @@ try
     builder.Services.AddSingleton<IAction, OpenCalculatorAction>();
     builder.Services.AddSingleton<IAction, OpenBrowserAction>();
     builder.Services.AddSingleton<IAction, OpenWhatsAppAction>();
+    builder.Services.AddSingleton<IAction, ReadDocumentAction>();
 
     // Voz: reconhecimento (fala → texto) e síntese (texto → fala). Nenhuma delas
     // mexe no AssistantService — o texto reconhecido entra pelo mesmo ProcessAsync de sempre.

@@ -12,7 +12,7 @@ public class OpenBrowserAction : IAction
     public string Description => "Abre o navegador predefinido, opcionalmente numa pesquisa do Google ou num URL indicado no argumento.";
     public bool RequiresConfirmation => false;
 
-    public Task ExecuteAsync(string? argument, CancellationToken cancellationToken = default)
+    public Task<string?> ExecuteAsync(string? argument, CancellationToken cancellationToken = default)
     {
         var url = BuildUrl(argument);
 
@@ -22,7 +22,7 @@ public class OpenBrowserAction : IAction
             UseShellExecute = true
         });
 
-        return Task.CompletedTask;
+        return Task.FromResult<string?>(null);
     }
 
     private static string BuildUrl(string? argument)

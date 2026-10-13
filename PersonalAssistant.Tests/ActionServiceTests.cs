@@ -57,6 +57,31 @@ public class ActionServiceTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_WhenActionReturnsOutput_ReturnsItInTheResult()
+    {
+        var fakeAction = new FakeAction("action_a", requiresConfirmation: false, output: "conteúdo lido");
+        var sut = new ActionService(new IAction[] { fakeAction }, NullLogger<ActionService>.Instance);
+
+        var result = await sut.ExecuteAsync("action_a", null);
+
+        Assert.True(result.HasOutput);
+        Assert.Equal("conteúdo lido", result.Output);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenActionHasNoOutput_ReturnsOnlyTheMessage()
+    {
+        var sut = new ActionService(
+            new IAction[] { new FakeAction("action_a", requiresConfirmation: false) },
+            NullLogger<ActionService>.Instance);
+
+        var result = await sut.ExecuteAsync("action_a", null);
+
+        Assert.False(result.HasOutput);
+        Assert.Contains("executada com sucesso", result.Message);
+    }
+
+    [Fact]
     public async Task ExecuteAsync_WhenActionDoesNotExist_ThrowsActionNotFoundException()
     {
         var sut = new ActionService(Array.Empty<IAction>(), NullLogger<ActionService>.Instance);

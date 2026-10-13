@@ -213,6 +213,54 @@ Ficam num ficheiro só teu, `appsettings.local.json`, que está no `.gitignore`:
 - `UseDesktopApp: true` tenta a app de desktop do WhatsApp; se não estiver instalada, abre o
   WhatsApp Web no navegador. Com `false`, usa sempre o WhatsApp Web.
 
+## Documentos ("o que tenho de fazer?")
+
+O assistente consegue ler documentos e responder com base neles. Exemplos:
+
+- *"que documentos tenho?"* → lista os documentos da pasta;
+- *"o que tenho de fazer no documento tarefas?"* → lê `tarefas.docx` e lista as tarefas;
+- *"resume a ata da reunião"* → lê o documento e faz um resumo.
+
+Formatos suportados: **.txt, .md, .docx e .pdf** (PDFs com texto; um PDF digitalizado como
+imagem não tem texto para ler).
+
+### Onde pôr os documentos
+
+Por segurança, o assistente **só lê documentos de uma pasta** (e das subpastas dela). Por omissão
+é `Documentos\Assistente` (criada automaticamente na primeira utilização). Pedidos como
+`..\..\Windows\...` ou `C:\outra\pasta` são recusados. Para mudar a pasta:
+
+```json
+"Documents": {
+  "Folder": "%USERPROFILE%\\Documents\\Assistente",
+  "MaxCharacters": 12000
+}
+```
+
+- Não precisas de dizer o nome exato: *"tarefas"* encontra `Tarefas da Semana.docx`
+  (sem maiúsculas nem acentos). Se houver vários parecidos, o assistente pergunta qual.
+- `MaxCharacters` limita o texto enviado ao modelo — modelos locais têm um limite de contexto.
+
+### Como funciona: ações que devolvem resultados
+
+Até aqui, as ações só *faziam* coisas (abrir um programa). A leitura de documentos precisa que a
+ação *devolva* algo à IA. Por isso o `IAction.ExecuteAsync` devolve `Task<string?>`:
+`null` para ações que só fazem algo, ou um texto (ex.: o conteúdo do documento).
+
+Quando há texto, o `AssistantService` faz uma **segunda chamada ao modelo**, com o pedido
+original e esse texto, e é essa a resposta que recebes:
+
+```
+"o que tenho de fazer em tarefas?"
+   → modelo: {"type":"action","action":"read_document","argument":"tarefas"}
+   → ReadDocumentAction devolve o texto do documento
+   → modelo (2.ª chamada, com o texto): {"type":"chat","message":"Tens 3 tarefas: ..."}
+```
+
+**Segurança:** o texto de um documento é tratado como *informação*, nunca como instruções. Se a
+segunda resposta do modelo pedir outra ação (por exemplo, porque o documento diz "abre o
+WhatsApp e manda..."), essa ação **não é executada**.
+
 ## Configuração (`appsettings.json`)
 
 ```json

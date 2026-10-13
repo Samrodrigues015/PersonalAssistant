@@ -19,6 +19,10 @@
     <PackageReference Include="Whisper.net.Runtime" Version="1.9.1" />
     <PackageReference Include="NAudio" Version="2.2.1" />
     <PackageReference Include="System.Speech" Version="10.0.9" />
+
+    <!-- Leitura de documentos: .docx (biblioteca oficial da Microsoft) e .pdf -->
+    <PackageReference Include="DocumentFormat.OpenXml" Version="3.5.1" />
+    <PackageReference Include="PdfPig" Version="0.1.16" />
   </ItemGroup>
 
   <ItemGroup>
