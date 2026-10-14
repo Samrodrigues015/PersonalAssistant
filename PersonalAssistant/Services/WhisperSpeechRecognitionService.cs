@@ -10,7 +10,10 @@ namespace PersonalAssistant.Services;
 
 /// <summary>
 /// Reconhecimento de voz local, sem depender de nenhum serviço externo:
-/// grava alguns segundos de áudio do microfone (NAudio) e transcreve-os com Whisper (Whisper.net).
+/// grava do microfone (NAudio) até acabares de falar e transcreve com Whisper (Whisper.net).
+///  - a gravação para sozinha quando te calas (VoiceActivityDetector), em vez de um tempo fixo;
+///  - se ninguém falar, nem sequer chama o Whisper (é com silêncio que ele "inventa" frases);
+///  - o texto final passa pelo TranscriptFilter, que descarta "alucinações" conhecidas.
 /// O modelo ggml é descarregado automaticamente na primeira utilização, se ainda não existir em disco.
 /// </summary>
 public class WhisperSpeechRecognitionService : ISpeechRecognitionService, IDisposable
@@ -34,15 +37,26 @@ public class WhisperSpeechRecognitionService : ISpeechRecognitionService, IDispo
 
         try
         {
-            _logger.LogInformation("A gravar áudio do microfone durante {Seconds}s...", _settings.RecordingSeconds);
+            _logger.LogDebug("A gravar do microfone até acabares de falar...");
 
-            await Task.Run(
-                () => RecordAudioToFile(tempFilePath, _settings.RecordingSeconds, cancellationToken),
+            var speechDetected = await Task.Run(
+                () => RecordAudioToFile(tempFilePath, _settings, cancellationToken),
                 cancellationToken);
 
-            using var processor = factory.CreateBuilder()
-                .WithLanguage(_settings.Language)
-                .Build();
+            if (!speechDetected)
+            {
+                _logger.LogInformation("Não foi detetada fala no microfone — nada para transcrever.");
+                return null;
+            }
+
+            var builder = factory.CreateBuilder().WithLanguage(_settings.Language);
+
+            if (!string.IsNullOrWhiteSpace(_settings.InitialPrompt))
+            {
+                builder = builder.WithPrompt(_settings.InitialPrompt);
+            }
+
+            using var processor = builder.Build();
 
             await using var audioStream = File.OpenRead(tempFilePath);
 
@@ -53,8 +67,14 @@ public class WhisperSpeechRecognitionService : ISpeechRecognitionService, IDispo
                 transcript.Append(segment.Text);
             }
 
-            var result = transcript.ToString().Trim();
-            return string.IsNullOrWhiteSpace(result) ? null : result;
+            var result = TranscriptFilter.Clean(transcript.ToString());
+
+            if (result is null)
+            {
+                _logger.LogInformation("Transcrição descartada (vazia ou \"alucinação\" conhecida do Whisper): {Raw}", transcript.ToString().Trim());
+            }
+
+            return result;
         }
         catch (Exception ex) when (ex is not SpeechServiceException)
         {
@@ -126,40 +146,86 @@ public class WhisperSpeechRecognitionService : ISpeechRecognitionService, IDispo
 
         try
         {
-            using var modelStream = await WhisperGgmlDownloader.Default.GetGgmlModelAsync(ggmlType);
-            using var fileWriter = File.OpenWrite(_settings.ModelPath);
-            await modelStream.CopyToAsync(fileWriter, cancellationToken);
+            // Descarrega para ".part" e só no fim renomeia: se a ligação cair a meio, não fica um
+            // modelo "meio descarregado" com o nome certo (que da próxima vez parecia instalado).
+            var partialPath = _settings.ModelPath + ".part";
+
+            await using (var modelStream = await WhisperGgmlDownloader.Default.GetGgmlModelAsync(ggmlType))
+            await using (var fileWriter = File.Create(partialPath))
+            {
+                await modelStream.CopyToAsync(fileWriter, cancellationToken);
+            }
+
+            File.Move(partialPath, _settings.ModelPath, overwrite: true);
         }
         catch (Exception ex)
         {
             throw new SpeechServiceException(
-                $"Não foi possível descarregar automaticamente o modelo Whisper. Descarrega manualmente um modelo ggml (ex.: ggml-base.bin de https://huggingface.co/ggerganov/whisper.cpp) e coloca-o em '{_settings.ModelPath}'.",
+                $"Não foi possível descarregar automaticamente o modelo Whisper. Descarrega manualmente um modelo ggml (ex.: ggml-small.bin de https://huggingface.co/ggerganov/whisper.cpp) e coloca-o em '{_settings.ModelPath}'.",
                 ex);
         }
     }
 
     /// <summary>
-    /// Grava áudio mono a 16kHz (formato que o Whisper espera) diretamente para um ficheiro WAV,
-    /// parando ao fim de <paramref name="seconds"/> segundos ou se o cancellationToken for acionado.
+    /// Grava áudio mono a 16kHz (formato que o Whisper espera) para um ficheiro WAV, até o
+    /// VoiceActivityDetector decidir parar (acabaste de falar, ninguém falou, ou tempo máximo).
     /// </summary>
-    private static void RecordAudioToFile(string filePath, int seconds, CancellationToken cancellationToken)
+    /// <returns>true se foi detetada fala na gravação.</returns>
+    private static bool RecordAudioToFile(string filePath, VoiceSettings settings, CancellationToken cancellationToken)
     {
         var waveFormat = new WaveFormat(16000, 16, 1);
 
-        using var waveIn = new WaveInEvent { WaveFormat = waveFormat };
+        var detector = new VoiceActivityDetector(
+            settings.SilenceThreshold,
+            TimeSpan.FromSeconds(settings.EndSilenceSeconds),
+            TimeSpan.FromSeconds(settings.SpeechStartTimeoutSeconds),
+            TimeSpan.FromSeconds(settings.MaxRecordingSeconds));
+
+        // BufferMilliseconds = 100 → recebemos o áudio aos pedaços de 0,1s, o que dá
+        // uma reação rápida quando paras de falar.
+        using var waveIn = new WaveInEvent { WaveFormat = waveFormat, BufferMilliseconds = 100 };
         using var writer = new WaveFileWriter(filePath, waveFormat);
 
         var recordingFinished = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var stopRequested = false;
 
-        waveIn.DataAvailable += (_, e) => writer.Write(e.Buffer, 0, e.BytesRecorded);
-        waveIn.RecordingStopped += (_, _) => recordingFinished.TrySetResult();
+        waveIn.DataAvailable += (_, e) =>
+        {
+            if (stopRequested)
+            {
+                return;
+            }
+
+            writer.Write(e.Buffer, 0, e.BytesRecorded);
+
+            var chunkDuration = TimeSpan.FromSeconds((double)e.BytesRecorded / waveFormat.AverageBytesPerSecond);
+            var state = detector.Process(e.Buffer.AsSpan(0, e.BytesRecorded), chunkDuration);
+
+            if (state != VoiceActivityState.Continue)
+            {
+                stopRequested = true;
+                waveIn.StopRecording();
+            }
+        };
+
+        waveIn.RecordingStopped += (_, args) =>
+        {
+            if (args.Exception is not null)
+            {
+                recordingFinished.TrySetException(args.Exception);
+            }
+            else
+            {
+                recordingFinished.TrySetResult();
+            }
+        };
 
         waveIn.StartRecording();
 
-        using var timer = new Timer(_ => waveIn.StopRecording(), null, TimeSpan.FromSeconds(seconds), Timeout.InfiniteTimeSpan);
         using var registration = cancellationToken.Register(() => waveIn.StopRecording());
 
         recordingFinished.Task.GetAwaiter().GetResult();
+        return detector.SpeechDetected;
     }
 
     public void Dispose()

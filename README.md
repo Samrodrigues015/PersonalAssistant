@@ -158,24 +158,117 @@ A V1 já inclui voz, como camada adicional por cima do texto — o `AssistantSer
 um comando novo.
 
 - **Reconhecimento de voz (fala → texto)**: local, com [Whisper.net](https://github.com/sandrohanea/whisper.net)
-  (bindings .NET para o Whisper da OpenAI/whisper.cpp). Grava o microfone com **NAudio**
-  durante `Voice:RecordingSeconds` segundos (5 por omissão) e transcreve.
-- **Síntese de fala (texto → voz)**: usa o motor nativo do Windows, `System.Speech.Synthesis`.
+  (bindings .NET para o Whisper da OpenAI/whisper.cpp). Grava o microfone com **NAudio** e
+  **para sozinho quando te calas** (deteção de voz pelo volume — `VoiceActivityDetector`).
+  Se ninguém falar, nem chama o Whisper, e frases típicas de "alucinação" do Whisper
+  ("Legendas pela comunidade Amara.org"...) são descartadas (`TranscriptFilter`).
+- **Síntese de fala (texto → voz)**: por omissão, **[Piper](https://github.com/rhasspy/piper)** —
+  voz neural, natural, offline e gratuita, em português de Portugal (voz `pt_PT-tugão-medium`).
+  Se o Piper falhar, usa automaticamente a voz do Windows (`System.Speech`) — padrão *Decorator*
+  no `FallbackTextToSpeechService`.
 - **`/ouvir` vs `/voz`**: `/ouvir` faz uma única troca (falas uma vez, ele responde uma vez, e
   volta ao modo de texto). `/voz` entra num ciclo — como falar com a Alexa — onde ele ouve,
   responde por voz, e volta a ouvir sozinho, até dizeres "sair" ou "parar".
 
 ### Primeira utilização
 
-Na primeira vez que usares `/ouvir`, o programa **descarrega automaticamente** o modelo
-Whisper configurado (por omissão, `ggml-base.bin`, ~140 MB) para a pasta `Models/`, a partir
-do Hugging Face. Isto só acontece uma vez — precisa de internet nesse momento, mas depois o
-reconhecimento corre 100% local e offline.
+Na primeira utilização, o programa **descarrega automaticamente** (só uma vez, precisa de
+internet nesse momento; depois corre 100% offline):
+
+- o modelo Whisper configurado (por omissão `ggml-small.bin`, ~470 MB) para a pasta `Models/`;
+- o Piper (~22 MB) e a voz portuguesa (~60 MB) para a pasta `Piper/`, na primeira vez que ele fala.
 
 Se preferires descarregar o modelo tu próprio, ou já o tiveres de outro projeto, basta colocá-lo
 no caminho definido em `Voice:ModelPath` no `appsettings.json`.
 
-### WhatsApp
+### Configuração (`appsettings.json`)
+
+```json
+"Voice": {
+  "ModelPath": "Models/ggml-small.bin",
+  "GgmlModelType": "Small",
+  "Language": "pt",
+  "InitialPrompt": "Pedido em português de Portugal a um assistente pessoal. ...",
+  "SpeechStartTimeoutSeconds": 6,
+  "EndSilenceSeconds": 1.2,
+  "MaxRecordingSeconds": 20,
+  "SilenceThreshold": 0.015,
+  "TtsEngine": "Piper"
+},
+"Piper": {
+  "Folder": "Piper",
+  "VoiceName": "pt_PT-tugão-medium",
+  "LengthScale": 1.0
+}
+```
+
+- `ModelPath` / `GgmlModelType` — modelo Whisper (`Tiny`, `Base`, `Small`, `Medium`). `Small`
+  percebe português muito melhor que `Base`; se o teu PC for lento, volta a `Base`
+  (`Models/ggml-base.bin`).
+- `InitialPrompt` — "contexto" dado ao Whisper: ajuda no idioma e em palavras/nomes que usas muito.
+- `SpeechStartTimeoutSeconds` — quanto tempo espera que comeces a falar.
+- `EndSilenceSeconds` — quanto silêncio, depois de falares, significa que acabaste.
+- `MaxRecordingSeconds` — limite máximo de uma gravação.
+- `SilenceThreshold` — volume mínimo para contar como fala. Se ele **não te ouve**, baixa
+  (ex.: `0.01`); se **nunca para de gravar** (ruído de fundo), sobe (ex.: `0.03`).
+- `TtsEngine` — `Piper` (voz natural) ou `System` (voz do Windows).
+- `Piper:VoiceName` — outras vozes em <https://huggingface.co/rhasspy/piper-voices>
+  (ex.: pasta `pt/pt_BR` para português do Brasil). `LengthScale` > 1 fala mais devagar.
+
+### Notas importantes
+
+- O CPU precisa de suportar as instruções **AVX/AVX2/FMA/F16C** (praticamente qualquer CPU
+  Intel/AMD dos últimos ~10 anos). Se o `Whisper.net.Runtime` falhar a carregar por causa disso,
+  troca o pacote no `.csproj` para `Whisper.net.Runtime.NoAvx` (mesma versão).
+- Requer o **Microsoft Visual C++ Redistributable** (normalmente já instalado no Windows 11).
+- `/ouvir` só existe como comando adicional — escrever continua a funcionar exatamente como
+  antes, e as respostas só são faladas quando a pergunta também veio por voz.
+- Os serviços de voz não têm testes automáticos (`WhisperSpeechRecognitionService` e
+  `SystemTextToSpeechService`), porque dependem de hardware real (microfone/colunas) — algo a
+  melhorar mais tarde, por exemplo isolando a parte de gravação/reprodução atrás de uma interface
+  mais pequena e mockável.
+
+### Se ele ouvir mas não falar (ou der `NullReferenceException` no arranque)
+
+Isto é um problema **conhecido** do `System.Speech` em Windows 10/11, não um bug específico
+deste projeto: as vozes que instalas em **Definições → Hora e idioma → Voz** ficam registadas
+no ramo "OneCore" do registo do Windows, mas o `System.Speech.Synthesis` (a API SAPI5 clássica,
+usada por aplicações .NET) só vê vozes registadas noutro sítio. Resultado: em muitos Windows
+modernos, não existe **nenhuma** voz visível para o `System.Speech`, mesmo havendo vozes
+instaladas.
+
+**Correção (recomendada):**
+
+1. Abre o PowerShell **como Administrador**.
+2. Corre o script incluído no projeto:
+   ```
+   cd PersonalAssistant\tools
+   .\Register-SapiVoicesFromOneCore.ps1
+   ```
+3. Fecha e reabre o Visual Studio (ou reinicia o PC, se ainda não resolver).
+4. Corre o `PersonalAssistant` outra vez — no arranque deve aparecer
+   `Motor de voz (TTS) pronto. Voz selecionada: '...' (...)`.
+
+O script só **copia** entradas do registo (não apaga nada) — é seguro e reversível: basta
+apagar as chaves copiadas em `HKLM\SOFTWARE\Microsoft\Speech\Voices\Tokens` se quiseres desfazer.
+
+**Se preferires não mexer no registo**, também podes instalar um pacote de idioma clássico:
+Definições → Hora e idioma → Idioma e região → Adicionar um idioma → escolhe um idioma e garante
+que a opção de "conversão de texto em voz" fica marcada durante a instalação. Isto às vezes
+regista também uma voz no sítio clássico, sem precisares do script.
+
+**Atenção ao `InvariantGlobalization`:** o `PersonalAssistant.csproj` **não** deve ter
+`<InvariantGlobalization>true</InvariantGlobalization>`. Com essa opção ligada, o .NET não
+consegue converter o código de idioma de cada voz (ex.: `816` → `pt-PT`), o `System.Speech`
+fica com o idioma da voz a `null` e rebenta com `NullReferenceException` dentro de
+`SpeechSynthesizer.Voice`, mesmo com as vozes bem registadas.
+
+Se, depois disto, ainda tiveres erro, a mensagem agora é sempre clara e aparece no terminal como
+`(não foi possível falar a resposta: ...)` — outras causas possíveis: dispositivo de saída de
+som errado ou mudo (Definições → Som), ou o processo `PersonalAssistant.exe` silenciado no
+Misturador de Volume do Windows.
+
+## WhatsApp
 
 O assistente consegue abrir o WhatsApp e preparar mensagens. Exemplos:
 
@@ -260,76 +353,6 @@ original e esse texto, e é essa a resposta que recebes:
 **Segurança:** o texto de um documento é tratado como *informação*, nunca como instruções. Se a
 segunda resposta do modelo pedir outra ação (por exemplo, porque o documento diz "abre o
 WhatsApp e manda..."), essa ação **não é executada**.
-
-## Configuração (`appsettings.json`)
-
-```json
-"Voice": {
-  "ModelPath": "Models/ggml-base.bin",
-  "GgmlModelType": "Base",
-  "Language": "pt",
-  "RecordingSeconds": 5
-}
-```
-
-- `ModelPath` — onde o modelo Whisper está (ou vai ser descarregado).
-- `GgmlModelType` — que modelo descarregar se `ModelPath` não existir (`Tiny`, `Base`, `Small`,
-  `Medium`, `Large`). Modelos maiores são mais precisos, mas mais lentos e maiores.
-- `Language` — código de idioma passado ao Whisper (`pt` funciona bem; `auto` deteta sozinho).
-- `RecordingSeconds` — quantos segundos gravar de cada vez que usas `/ouvir`.
-
-### Notas importantes
-
-- O CPU precisa de suportar as instruções **AVX/AVX2/FMA/F16C** (praticamente qualquer CPU
-  Intel/AMD dos últimos ~10 anos). Se o `Whisper.net.Runtime` falhar a carregar por causa disso,
-  troca o pacote no `.csproj` para `Whisper.net.Runtime.NoAvx` (mesma versão).
-- Requer o **Microsoft Visual C++ Redistributable** (normalmente já instalado no Windows 11).
-- `/ouvir` só existe como comando adicional — escrever continua a funcionar exatamente como
-  antes, e as respostas só são faladas quando a pergunta também veio por voz.
-- Os serviços de voz não têm testes automáticos (`WhisperSpeechRecognitionService` e
-  `SystemTextToSpeechService`), porque dependem de hardware real (microfone/colunas) — algo a
-  melhorar mais tarde, por exemplo isolando a parte de gravação/reprodução atrás de uma interface
-  mais pequena e mockável.
-
-### Se ele ouvir mas não falar (ou der `NullReferenceException` no arranque)
-
-Isto é um problema **conhecido** do `System.Speech` em Windows 10/11, não um bug específico
-deste projeto: as vozes que instalas em **Definições → Hora e idioma → Voz** ficam registadas
-no ramo "OneCore" do registo do Windows, mas o `System.Speech.Synthesis` (a API SAPI5 clássica,
-usada por aplicações .NET) só vê vozes registadas noutro sítio. Resultado: em muitos Windows
-modernos, não existe **nenhuma** voz visível para o `System.Speech`, mesmo havendo vozes
-instaladas.
-
-**Correção (recomendada):**
-
-1. Abre o PowerShell **como Administrador**.
-2. Corre o script incluído no projeto:
-   ```
-   cd PersonalAssistant\tools
-   .\Register-SapiVoicesFromOneCore.ps1
-   ```
-3. Fecha e reabre o Visual Studio (ou reinicia o PC, se ainda não resolver).
-4. Corre o `PersonalAssistant` outra vez — no arranque deve aparecer
-   `Motor de voz (TTS) pronto. Voz selecionada: '...' (...)`.
-
-O script só **copia** entradas do registo (não apaga nada) — é seguro e reversível: basta
-apagar as chaves copiadas em `HKLM\SOFTWARE\Microsoft\Speech\Voices\Tokens` se quiseres desfazer.
-
-**Se preferires não mexer no registo**, também podes instalar um pacote de idioma clássico:
-Definições → Hora e idioma → Idioma e região → Adicionar um idioma → escolhe um idioma e garante
-que a opção de "conversão de texto em voz" fica marcada durante a instalação. Isto às vezes
-regista também uma voz no sítio clássico, sem precisares do script.
-
-**Atenção ao `InvariantGlobalization`:** o `PersonalAssistant.csproj` **não** deve ter
-`<InvariantGlobalization>true</InvariantGlobalization>`. Com essa opção ligada, o .NET não
-consegue converter o código de idioma de cada voz (ex.: `816` → `pt-PT`), o `System.Speech`
-fica com o idioma da voz a `null` e rebenta com `NullReferenceException` dentro de
-`SpeechSynthesizer.Voice`, mesmo com as vozes bem registadas.
-
-Se, depois disto, ainda tiveres erro, a mensagem agora é sempre clara e aparece no terminal como
-`(não foi possível falar a resposta: ...)` — outras causas possíveis: dispositivo de saída de
-som errado ou mudo (Definições → Som), ou o processo `PersonalAssistant.exe` silenciado no
-Misturador de Volume do Windows.
 
 ## Configuração (`appsettings.json`)
 

@@ -25,6 +25,7 @@ try
     builder.Services.Configure<VoiceSettings>(builder.Configuration.GetSection("Voice"));
     builder.Services.Configure<WhatsAppSettings>(builder.Configuration.GetSection("WhatsApp"));
     builder.Services.Configure<DocumentSettings>(builder.Configuration.GetSection("Documents"));
+    builder.Services.Configure<PiperSettings>(builder.Configuration.GetSection("Piper"));
 
     // HttpClient "tipado": sempre que pedirmos um IOllamaService ao container,
     // recebemos um OllamaService já com um HttpClient configurado (BaseAddress, timeout).
@@ -55,7 +56,28 @@ try
     // Voz: reconhecimento (fala → texto) e síntese (texto → fala). Nenhuma delas
     // mexe no AssistantService — o texto reconhecido entra pelo mesmo ProcessAsync de sempre.
     builder.Services.AddSingleton<ISpeechRecognitionService, WhisperSpeechRecognitionService>();
-    builder.Services.AddSingleton<ITextToSpeechService, SystemTextToSpeechService>();
+
+    // Síntese de fala: Piper (voz neural) com a voz do Windows como reserva, ou só a do Windows,
+    // conforme "Voice:TtsEngine". A "factory" (o lambda) decide qual montar; o resto do programa
+    // recebe sempre só um ITextToSpeechService e não sabe qual é.
+    builder.Services.AddHttpClient(); // IHttpClientFactory, usado pelo Piper para descarregar a voz
+    builder.Services.AddSingleton<SystemTextToSpeechService>();
+    builder.Services.AddSingleton<PiperTextToSpeechService>();
+    builder.Services.AddSingleton<ITextToSpeechService>(serviceProvider =>
+    {
+        var voiceSettings = serviceProvider.GetRequiredService<IOptions<VoiceSettings>>().Value;
+        var systemVoice = serviceProvider.GetRequiredService<SystemTextToSpeechService>();
+
+        if (!string.Equals(voiceSettings.TtsEngine, "Piper", StringComparison.OrdinalIgnoreCase))
+        {
+            return systemVoice;
+        }
+
+        return new FallbackTextToSpeechService(
+            serviceProvider.GetRequiredService<PiperTextToSpeechService>(),
+            systemVoice,
+            serviceProvider.GetRequiredService<ILogger<FallbackTextToSpeechService>>());
+    });
 
     builder.Logging.ClearProviders();
     builder.Logging.AddConsole();
@@ -238,8 +260,8 @@ static bool IsExitPhrase(string text)
 static async Task<string?> CaptureVoiceInputAsync(ISpeechRecognitionService speechRecognitionService, CancellationToken cancellationToken)
 {
     Console.WriteLine();
-    Console.WriteLine("A preparar o reconhecimento de voz (a primeira vez pode demorar, por ter de descarregar o modelo)...");
-    Console.WriteLine("Fala agora.");
+    // Na primeira vez, antes de ouvir, ainda descarrega/carrega o modelo do Whisper (pode demorar).
+    Console.WriteLine("A ouvir... fala à vontade — paro de gravar quando te calares.");
 
     try
     {
