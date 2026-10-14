@@ -306,6 +306,21 @@ Ficam num ficheiro só teu, `appsettings.local.json`, que está no `.gitignore`:
 - `UseDesktopApp: true` tenta a app de desktop do WhatsApp; se não estiver instalada, abre o
   WhatsApp Web no navegador. Com `false`, usa sempre o WhatsApp Web.
 
+### Comandos diretos (sem passar pelo modelo)
+
+Os pedidos mais comuns são reconhecidos **diretamente**, sem perguntar ao modelo de IA — tal
+como fazem a Alexa ou a Siri. É mais rápido e evita que o modelo "finja" que fez algo sem o fazer:
+
+- *"abre o WhatsApp"*, *"abre a conversa com a Ester"*, *"manda à Ester que chego às 8"*
+  (também "envia", "escreve", "diz", com ou sem "no WhatsApp");
+- *"abre a calculadora"*, *"abre o bloco de notas"*.
+
+Os nomes aceitam pequenos erros de transcrição (*"Esther"* encontra *"Ester"*), exceto nomes
+curtos de 3 letras, que têm de ser exatos (*"Ana"* ≠ *"Ema"*). Tudo o resto vai para o modelo.
+
+Cada ação pode implementar `IDirectCommand` (`TryMatch` + `DescribeSuccess`); o
+`AssistantService` testa-as todas antes de chamar o modelo.
+
 ## Documentos ("o que tenho de fazer?")
 
 O assistente consegue ler documentos e responder com base neles. Exemplos:

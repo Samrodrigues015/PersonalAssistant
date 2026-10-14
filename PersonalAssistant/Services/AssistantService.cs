@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using PersonalAssistant.Actions;
 using PersonalAssistant.Configuration;
 using PersonalAssistant.Models;
 
@@ -47,6 +48,17 @@ public class AssistantService : IAssistantService
         if (_pendingAction is not null)
         {
             return await HandlePendingConfirmationAsync(userInput, cancellationToken);
+        }
+
+        // Comandos simples e frequentes ("abre o WhatsApp", "manda à Ester que...") são
+        // reconhecidos diretamente, sem o modelo: mais rápido e sem o risco de o modelo
+        // "fingir" que fez algo sem pedir a ação.
+        var directResponse = await TryHandleDirectCommandAsync(userInput, cancellationToken);
+
+        if (directResponse is not null)
+        {
+            _conversationService.AddAssistantMessage(directResponse);
+            return directResponse;
         }
 
         var prompt = BuildPrompt(userInput);
@@ -153,6 +165,47 @@ public class AssistantService : IAssistantService
     }
 
     /// <summary>
+    /// Procura uma ação que reconheça a frase sozinha (IDirectCommand) e, se houver, executa-a.
+    /// Devolve a resposta para o utilizador, ou null se nenhuma ação reconheceu a frase.
+    /// </summary>
+    private async Task<string?> TryHandleDirectCommandAsync(string userInput, CancellationToken cancellationToken)
+    {
+        foreach (var action in _actionService.GetAvailableActions())
+        {
+            if (action is not IDirectCommand command || !command.TryMatch(userInput, out var argument))
+            {
+                continue;
+            }
+
+            _logger.LogInformation("Comando direto reconhecido: {Action} (argumento: '{Argument}')", action.Name, argument);
+
+            if (action.RequiresConfirmation)
+            {
+                _pendingAction = new PendingAction(action.Name, argument, userInput);
+                return $"Queres que execute a ação '{action.Name}'? (sim/não)";
+            }
+
+            try
+            {
+                var result = await _actionService.ExecuteAsync(action.Name, argument, cancellationToken);
+
+                return result.HasOutput
+                    ? await AnswerFromActionOutputAsync(userInput, action.Name, result.Output!, cancellationToken)
+                    : command.DescribeSuccess(argument);
+            }
+            catch (ActionExecutionException ex)
+            {
+                _logger.LogError(ex, "Erro ao executar o comando direto '{Action}'", action.Name);
+                // A causa real (ex.: "Não conheço o contacto 'X'") está na exceção interna:
+                // é essa a frase útil para dizer em voz alta.
+                return $"Não consegui. {ex.InnerException?.Message ?? ex.Message}";
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// Segunda chamada ao modelo: dá-lhe o pedido original + o texto que a ação devolveu,
     /// e pede uma resposta normal (chat) baseada nesse texto.
     ///
@@ -235,6 +288,22 @@ public class AssistantService : IAssistantService
         builder.Append(actionsDescription);
         builder.AppendLine("Se o pedido não corresponder a nenhuma destas ações, responde com \"type\": \"chat\".");
         builder.AppendLine("Nunca inventes nomes de ações que não estejam na lista acima.");
+        builder.AppendLine("REGRA IMPORTANTE: nunca digas que fizeste, estás a fazer ou vais fazer algo no computador numa resposta \"chat\".");
+        builder.AppendLine("Se o utilizador pede para fazer algo e existe uma ação para isso, responde SEMPRE com \"type\": \"action\".");
+        builder.AppendLine("Se não existe ação para isso, diz com honestidade que ainda não sabes fazer isso.");
+        builder.AppendLine("Respostas \"chat\" curtas e diretas (1 a 3 frases), porque podem ser lidas em voz alta.");
+        builder.AppendLine();
+        builder.AppendLine("Exemplos:");
+        builder.AppendLine("Utilizador: abre o whatsapp");
+        builder.AppendLine("{\"type\": \"action\", \"action\": \"open_whatsapp\", \"argument\": null, \"message\": \"A abrir o WhatsApp.\"}");
+        builder.AppendLine("Utilizador: diz à Ana que já saí de casa");
+        builder.AppendLine("{\"type\": \"action\", \"action\": \"open_whatsapp\", \"argument\": \"Ana: Já saí de casa\", \"message\": \"\"}");
+        builder.AppendLine("Utilizador: pesquisa receitas de bacalhau");
+        builder.AppendLine("{\"type\": \"action\", \"action\": \"open_browser\", \"argument\": \"receitas de bacalhau\", \"message\": \"\"}");
+        builder.AppendLine("Utilizador: o que tenho de fazer no documento tarefas?");
+        builder.AppendLine("{\"type\": \"action\", \"action\": \"read_document\", \"argument\": \"tarefas\", \"message\": \"\"}");
+        builder.AppendLine("Utilizador: qual é a capital de França?");
+        builder.AppendLine("{\"type\": \"chat\", \"message\": \"A capital de França é Paris.\"}");
         builder.AppendLine();
         builder.AppendLine("Histórico recente da conversa:");
         builder.AppendLine(_conversationService.BuildHistoryText());

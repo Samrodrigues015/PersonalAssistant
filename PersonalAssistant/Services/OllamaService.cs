@@ -30,7 +30,12 @@ public class OllamaService : IOllamaService
         {
             Model = _settings.Model,
             Prompt = prompt,
-            Stream = false
+            Stream = false,
+            // Pedimos SEMPRE JSON (o AssistantService espera {"type": ...}). Com "format": "json",
+            // o próprio Ollama garante que a resposta é JSON válido — o modelo deixa de poder
+            // responder com texto solto à volta.
+            Format = "json",
+            Options = new OllamaOptions { Temperature = _settings.Temperature }
         };
 
         _logger.LogInformation("A enviar pedido para o Ollama (modelo: {Model})", _settings.Model);
@@ -95,6 +100,18 @@ public class OllamaService : IOllamaService
 
         [JsonPropertyName("stream")]
         public bool Stream { get; set; }
+
+        [JsonPropertyName("format")]
+        public string? Format { get; set; }
+
+        [JsonPropertyName("options")]
+        public OllamaOptions? Options { get; set; }
+    }
+
+    private class OllamaOptions
+    {
+        [JsonPropertyName("temperature")]
+        public double Temperature { get; set; }
     }
 
     private class OllamaGenerateResponse
